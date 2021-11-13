@@ -846,6 +846,11 @@ struct type_reflection {
     // WAR for typeid discarding cv qualifiers on value-types
     // Wrap type in dummy template class to preserve cv-qualifiers, then strip
     // off the wrapper from the resulting string.
+
+    // This fixes a bug where these two values will return empty strings
+    if constexpr(std::is_same_v<T, int64_t>) return "signed long long";
+    if constexpr(std::is_same_v<T, uint64_t>) return "unsigned long long";
+	  
     std::string wrapped_name =
         demangle_native_type(typeid(JitifyTypeNameWrapper_<T>));
     // Note: The reflected name of this class also has namespace prefixes.
