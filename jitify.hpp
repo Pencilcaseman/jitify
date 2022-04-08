@@ -496,10 +496,13 @@ inline std::string comment_out_code_line(int line_num, std::string source) {
 inline void print_with_line_numbers(std::string const& source) {
   int linenum = 1;
   std::stringstream source_ss(source);
+  std::stringstream output_ss;
+  output_ss.imbue(std::locale::classic());
   for (std::string line; std::getline(source_ss, line); ++linenum) {
-    std::cout << std::setfill(' ') << std::setw(3) << linenum << " " << line
+    output_ss << std::setfill(' ') << std::setw(3) << linenum << " " << line
               << std::endl;
   }
+  std::cout << output_ss.str();
 }
 
 inline void print_compile_log(std::string program_name,
@@ -693,6 +696,7 @@ inline bool load_source(
   //   of the same header from different paths.
   if (pragma_once) {
     std::stringstream ss;
+    ss.imbue(std::locale::classic());
     ss << std::uppercase << std::hex << std::setw(8) << std::setfill('0')
        << hash;
     std::string include_guard_name = "_JITIFY_INCLUDE_GUARD_" + ss.str() + "\n";
@@ -1613,14 +1617,28 @@ struct IntegerLimits {
 #endif  // __cplusplus >= 201103L
 	enum {
        is_specialized = true,
-       digits = (Digits == -1) ? (int)(sizeof(T)*8 - (Min != 0)) : Digits,
-       digits10   = (digits * 30103) / 100000,
-       is_signed  = ((T)(-1)<0),
-       is_integer = true,
-       is_exact   = true,
-       radix      = 2,
-       is_bounded = true,
-       is_modulo  = false
+       digits            = (Digits == -1) ? (int)(sizeof(T)*8 - (Min != 0)) : Digits,
+       digits10          = (digits * 30103) / 100000,
+       is_signed         = ((T)(-1)<0),
+       is_integer        = true,
+       is_exact          = true,
+       has_infinity      = false,
+       has_quiet_NaN     = false,
+       has_signaling_NaN = false,
+       has_denorm        = 0,
+       has_denorm_loss   = false,
+       round_style       = 0,
+       is_iec559         = false,
+       is_bounded        = true,
+       is_modulo         = !(is_signed || Max == 1 /*is bool*/),
+       max_digits10      = 0,
+       radix             = 2,
+       min_exponent      = 0,
+       min_exponent10    = 0,
+       max_exponent      = 0,
+       max_exponent10    = 0,
+       tinyness_before   = false,
+       traps             = false
 	};
 };
 } // namespace __jitify_detail
@@ -2695,6 +2713,17 @@ inline nvrtcResult compile_kernel(std::string program_name,
       &nvrtc_program, program_source.c_str(), program_name.c_str(), num_headers,
       header_sources_c.data(), header_names_c.data()));
 
+  // Ensure nvrtc_program gets destroyed.
+  struct ScopedNvrtcProgramDestroyer {
+    nvrtcProgram& nvrtc_program_;
+    ScopedNvrtcProgramDestroyer(nvrtcProgram& nvrtc_program)
+        : nvrtc_program_(nvrtc_program) {}    
+    ~ScopedNvrtcProgramDestroyer() { nvrtcDestroyProgram(&nvrtc_program_); }
+    ScopedNvrtcProgramDestroyer(const ScopedNvrtcProgramDestroyer&) = delete;
+    ScopedNvrtcProgramDestroyer& operator=(const ScopedNvrtcProgramDestroyer&) =
+        delete;
+  } nvrtc_program_scope_guard{nvrtc_program};
+
 #if CUDA_VERSION >= 8000
   if (!instantiation.empty()) {
     CHECK_NVRTC(nvrtcAddNameExpression(nvrtc_program, instantiation.c_str()));
@@ -2742,7 +2771,6 @@ inline nvrtcResult compile_kernel(std::string program_name,
 #endif
   }
 
-  CHECK_NVRTC(nvrtcDestroyProgram(&nvrtc_program));
 #undef CHECK_NVRTC
   return NVRTC_SUCCESS;
 }
@@ -3088,6 +3116,7 @@ class KernelLauncher {
   std::unique_ptr<KernelLauncher_impl const> _impl;
 
  public:
+  KernelLauncher() = default;
   inline KernelLauncher(KernelInstantiation const& kernel_inst, dim3 grid,
                         dim3 block, unsigned int smem = 0,
                         cudaStream_t stream = 0);
@@ -3156,6 +3185,7 @@ class KernelInstantiation {
   std::unique_ptr<KernelInstantiation_impl const> _impl;
 
  public:
+  KernelInstantiation() = default;
   inline KernelInstantiation(Kernel const& kernel,
                              std::vector<std::string> const& template_args);
 
@@ -3303,6 +3333,7 @@ class Kernel {
   std::unique_ptr<Kernel_impl const> _impl;
 
  public:
+  Kernel() = default;
   Kernel(Program const& program, std::string name,
          jitify::detail::vector<std::string> options = 0);
 
@@ -3367,6 +3398,7 @@ class Program {
   std::unique_ptr<Program_impl const> _impl;
 
  public:
+  Program() = default;
   Program(JitCache& cache, std::string source,
           jitify::detail::vector<std::string> headers = 0,
           jitify::detail::vector<std::string> options = 0,
