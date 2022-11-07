@@ -791,7 +791,7 @@ inline void strip_double_underscore_tokens(char* s) {
   } while ((*w++ = *s++));
 }
 
-//#if CUDA_VERSION < 8000
+// #if CUDA_VERSION < 8000
 #ifdef _MSC_VER  // MSVC compiler
 inline std::string demangle_cuda_symbol(const char* mangled_name) {
   // We don't have a way to demangle CUDA symbol names under MSVC.
@@ -813,7 +813,7 @@ inline std::string demangle_native_type(const std::type_info& typeinfo) {
   }
   throw std::runtime_error("UnDecorateSymbolName failed");
 }
-#else  // not MSVC
+#else   // not MSVC
 inline std::string demangle_cuda_symbol(const char* mangled_name) {
   size_t bufsize = 0;
   char* buf = nullptr;
@@ -837,7 +837,7 @@ inline std::string demangle_native_type(const std::type_info& typeinfo) {
   return demangle_cuda_symbol(typeinfo.name());
 }
 #endif  // not MSVC
-//#endif // CUDA_VERSION < 8000
+// #endif // CUDA_VERSION < 8000
 
 template <typename>
 class JitifyTypeNameWrapper_ {};
@@ -845,16 +845,16 @@ class JitifyTypeNameWrapper_ {};
 template <typename T>
 struct type_reflection {
   inline static std::string name() {
-    //#if CUDA_VERSION < 8000
-    // TODO: Use nvrtcGetTypeName once it has the same behavior as this.
-    // WAR for typeid discarding cv qualifiers on value-types
-    // Wrap type in dummy template class to preserve cv-qualifiers, then strip
-    // off the wrapper from the resulting string.
+    // #if CUDA_VERSION < 8000
+    //  TODO: Use nvrtcGetTypeName once it has the same behavior as this.
+    //  WAR for typeid discarding cv qualifiers on value-types
+    //  Wrap type in dummy template class to preserve cv-qualifiers, then strip
+    //  off the wrapper from the resulting string.
 
     // This fixes a bug where these two values will return empty strings
-    if constexpr(std::is_same_v<T, int64_t>) return "signed long long";
-    if constexpr(std::is_same_v<T, uint64_t>) return "unsigned long long";
-	  
+    if constexpr (std::is_same_v<T, int64_t>) return "signed long long";
+    if constexpr (std::is_same_v<T, uint64_t>) return "unsigned long long";
+
     std::string wrapped_name =
         demangle_native_type(typeid(JitifyTypeNameWrapper_<T>));
     // Note: The reflected name of this class also has namespace prefixes.
@@ -867,16 +867,16 @@ struct type_reflection {
     std::string name =
         wrapped_name.substr(start, wrapped_name.size() - (start + 1));
     return name;
-    //#else
-    //         std::string ret;
-    //         nvrtcResult status = nvrtcGetTypeName<T>(&ret);
-    //         if( status != NVRTC_SUCCESS ) {
-    //                 throw std::runtime_error(std::string("nvrtcGetTypeName
-    // failed:
+    // #else
+    //          std::string ret;
+    //          nvrtcResult status = nvrtcGetTypeName<T>(&ret);
+    //          if( status != NVRTC_SUCCESS ) {
+    //                  throw std::runtime_error(std::string("nvrtcGetTypeName
+    //  failed:
     //")+ nvrtcGetErrorString(status));
-    //         }
-    //         return ret;
-    //#endif
+    //          }
+    //          return ret;
+    // #endif
   }
 };  // namespace detail
 template <typename T, T VALUE>
@@ -1378,7 +1378,8 @@ class CUDAKernel {
   const std::vector<std::string>& link_paths() const { return _link_paths; }
 };
 
-static const char* jitsafe_header_preinclude_h = R"(
+static const char* jitsafe_header_preinclude_h =
+    R"(
 //// WAR for Thrust (which appears to have forgotten to include this in result_of_adaptable_function.h
 //#include <type_traits>
 
@@ -1399,14 +1400,14 @@ static const char* jitsafe_header_preinclude_h = R"(
 #define catch(...)
 )"
 #if defined(_WIN32) || defined(_WIN64)
-// WAR for NVRTC <= 11.0 not defining _WIN64.
-R"(
+    // WAR for NVRTC <= 11.0 not defining _WIN64.
+    R"(
 #ifndef _WIN64
 #define _WIN64 1
 #endif
 )"
 #endif
-;
+    ;
 
 static const char* jitsafe_header_float_h = R"(
 #pragma once
@@ -2453,7 +2454,16 @@ static const std::map<std::string, std::string>& get_jitsafe_headers_map() {
 
 inline void add_options_from_env(std::vector<std::string>& options) {
   // Add options from environment variable
+// Disable getenv deprecation warning
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable : 4996)
+#endif
   const char* env_options = std::getenv("JITIFY_OPTIONS");
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
+
   if (env_options) {
     std::stringstream ss;
     ss << env_options;
@@ -2717,7 +2727,7 @@ inline nvrtcResult compile_kernel(std::string program_name,
   struct ScopedNvrtcProgramDestroyer {
     nvrtcProgram& nvrtc_program_;
     ScopedNvrtcProgramDestroyer(nvrtcProgram& nvrtc_program)
-        : nvrtc_program_(nvrtc_program) {}    
+        : nvrtc_program_(nvrtc_program) {}
     ~ScopedNvrtcProgramDestroyer() { nvrtcDestroyProgram(&nvrtc_program_); }
     ScopedNvrtcProgramDestroyer(const ScopedNvrtcProgramDestroyer&) = delete;
     ScopedNvrtcProgramDestroyer& operator=(const ScopedNvrtcProgramDestroyer&) =
