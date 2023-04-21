@@ -123,8 +123,12 @@
 #include <cstdlib>  // For realpath
 #define JITIFY_PATH_MAX PATH_MAX
 #elif defined(_WIN32) || defined(_WIN64)
+#if !defined(JITIFY_NO_WINDOWS_H)
 #include <windows.h>
 #define JITIFY_PATH_MAX MAX_PATH
+#else
+#define JITIFY_PATH_MAX 260
+#endif
 #else
 #error "Unsupported platform"
 #endif
