@@ -203,6 +203,24 @@ typedef std::istream* (*file_callback_type)(std::string filename,
 // Exclude from Doxygen
 //! \cond
 
+// CUDA vector types
+
+struct float2 {
+  float x, y;
+};
+
+struct float3 {
+  float x, y, z;
+};
+
+struct float4 {
+  float x, y, z, w;
+};
+
+struct double2 {
+  double x, y;
+};
+
 class JitCache;
 
 // Simple cache using LRU discard policy
@@ -860,6 +878,12 @@ struct type_reflection {
     // This fixes a bug where these two values will return empty strings
     if constexpr (std::is_same_v<T, int64_t>) return "signed long long";
     if constexpr (std::is_same_v<T, uint64_t>) return "unsigned long long";
+
+    // Vector types
+    if constexpr (std::is_same_v<T, float2>) return "float2";
+    if constexpr (std::is_same_v<T, float3>) return "float3";
+    if constexpr (std::is_same_v<T, float4>) return "float4";
+    if constexpr (std::is_same_v<T, double2>) return "double2";
 
     std::string wrapped_name =
         demangle_native_type(typeid(JitifyTypeNameWrapper_<T>));
