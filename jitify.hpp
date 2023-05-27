@@ -205,20 +205,94 @@ typedef std::istream* (*file_callback_type)(std::string filename,
 
 // CUDA vector types
 
-struct float2 {
+class float2 {
+  public:
+  float2() : x(0), y(0) {}
+  float2(float x) : x(x), y(x) {}
+  float2(float x, float y) : x(x), y(y) {}
+  float2(const float2& v) : x(v.x), y(v.y) {}
+  float2& operator=(const float2& v) {
+    x = v.x;
+    y = v.y;
+    return *this;
+  }
   float x, y;
 };
 
-struct float3 {
+class float3 {
+  public:
+  float3() : x(0), y(0), z(0) {}
+  float3(float x) : x(x), y(x), z(x) {}
+  float3(float x, float y, float z) : x(x), y(y), z(z) {}
+  float3(const float3& v) : x(v.x), y(v.y), z(v.z) {}
+  float3& operator=(const float3& v) {
+    x = v.x;
+    y = v.y;
+    z = v.z;
+    return *this;
+  }
   float x, y, z;
 };
 
-struct float4 {
+class float4 {
+  public:
+  float4() : x(0), y(0), z(0), w(0) {}
+  float4(float x) : x(x), y(x), z(x), w(x) {}
+  float4(float x, float y, float z, float w) : x(x), y(y), z(z), w(w) {}
+  float4(const float4& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+  float4& operator=(const float4& v) {
+    x = v.x;
+    y = v.y;
+    z = v.z;
+    w = v.w;
+    return *this;
+  }
   float x, y, z, w;
 };
 
-struct double2 {
+class double2 {
+  public:
+  double2() : x(0), y(0) {}
+  double2(double x) : x(x), y(x) {}
+  double2(double x, double y) : x(x), y(y) {}
+  double2(const double2& v) : x(v.x), y(v.y) {}
+  double2& operator=(const double2& v) {
+    x = v.x;
+    y = v.y;
+    return *this;
+  }
   double x, y;
+};
+
+class double3 {
+  public:
+  double3() : x(0), y(0), z(0) {}
+  double3(double x) : x(x), y(x), z(x) {}
+  double3(double x, double y, double z) : x(x), y(y), z(z) {}
+  double3(const double3& v) : x(v.x), y(v.y), z(v.z) {}
+  double3& operator=(const double3& v) {
+    x = v.x;
+    y = v.y;
+    z = v.z;
+    return *this;
+  }
+  double x, y, z;
+};
+
+class double4 {
+  public:
+  double4() : x(0), y(0), z(0), w(0) {}
+  double4(double x) : x(x), y(x), z(x), w(x) {}
+  double4(double x, double y, double z, double w) : x(x), y(y), z(z), w(w) {}
+  double4(const double4& v) : x(v.x), y(v.y), z(v.z), w(v.w) {}
+  double4& operator=(const double4& v) {
+    x = v.x;
+    y = v.y;
+    z = v.z;
+    w = v.w;
+    return *this;
+  }
+  double x, y, z, w;
 };
 
 class JitCache;
