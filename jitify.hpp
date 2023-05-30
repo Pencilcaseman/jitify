@@ -958,6 +958,8 @@ struct type_reflection {
     if constexpr (std::is_same_v<T, float3>) return "float3";
     if constexpr (std::is_same_v<T, float4>) return "float4";
     if constexpr (std::is_same_v<T, double2>) return "double2";
+    if constexpr (std::is_same_v<T, double3>) return "double3";
+    if constexpr (std::is_same_v<T, double4>) return "double4";
 
     std::string wrapped_name =
         demangle_native_type(typeid(JitifyTypeNameWrapper_<T>));
