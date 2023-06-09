@@ -946,15 +946,6 @@ struct type_reflection {
     if constexpr (std::is_same_v<T, double3>) return "double3";
     if constexpr (std::is_same_v<T, double4>) return "double4";
 
-    #if defined(LIBRAPID_MAJOR)
-    // LibRapid-specific types
-    
-    if constexpr (librapid::typetraits::TypeInfo<T>::type == librapid::detail::LibRapidType::Dual) {
-      return fmt::format("Dual<{}>", type_reflection<typename T::value_type>::name());
-    }
-
-    #endif // defined(LIBRAPID_MAJOR)
-
     std::string wrapped_name =
         demangle_native_type(typeid(JitifyTypeNameWrapper_<T>));
     // Note: The reflected name of this class also has namespace prefixes.
