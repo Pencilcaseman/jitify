@@ -45,7 +45,7 @@
     CUresult status = call;                                               \
     if (status != CUDA_SUCCESS) {                                         \
       const char* str;                                                    \
-      cuGetErrorName(status, &str);                                       \
+      cuda().GetErrorName()(status, &str);                                \
       std::cout << "(CUDA) returned " << str;                             \
       std::cout << " (" << __FILE__ << ":" << __LINE__ << ":" << __func__ \
                 << "())" << std::endl;                                    \
@@ -281,8 +281,8 @@ __global__ void my_kernel(const T*, U*) {}
   for (int i = 0; i < nrep; ++i) {
     // Benchmark direct kernel launch.
     auto t0 = std::chrono::steady_clock::now();
-    cuLaunchKernel(kernel->function(), grid.x, grid.y, grid.z, block.x, block.y,
-                   block.z, 0, 0, arg_ptrs, nullptr);
+    cuda().LaunchKernel()(kernel->function(), grid.x, grid.y, grid.z, block.x,
+                          block.y, block.z, 0, 0, arg_ptrs, nullptr);
     auto dt = std::chrono::steady_clock::now() - t0;
     // Using the minimum is more robust than the average (though this test still
     // remains sensitive to the system environment and has been observed to fail
@@ -601,9 +601,61 @@ TEST(Jitify2Test, PathJoin) {
   EXPECT_EQ(jitify2::detail::path_join("foo/bar/", "2/1"), "foo/bar/2/1");
   EXPECT_EQ(jitify2::detail::path_join("foo/bar", "/2/1"), "");
 #if defined _WIN32 || defined _WIN64
-  EXPECT_EQ(jitify2::detail::path_join("foo\\bar", "2\\1"), "foo\\bar\\2\\1");
+  EXPECT_EQ(jitify2::detail::path_join("foo\\bar", "2\\1"), "foo\\bar/2\\1");
   EXPECT_EQ(jitify2::detail::path_join("foo\\bar\\", "2\\1"), "foo\\bar\\2\\1");
   EXPECT_EQ(jitify2::detail::path_join("foo\\bar", "\\2\\1"), "");
+#endif
+}
+
+TEST(Jitify2Test, PathSimplify) {
+  EXPECT_EQ(jitify2::detail::path_simplify(""), "");
+  EXPECT_EQ(jitify2::detail::path_simplify("/"), "/");
+  EXPECT_EQ(jitify2::detail::path_simplify("//"), "/");
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/bar"), "/foo/bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("foo/bar"), "foo/bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/./bar"), "/foo/bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("foo/./bar"), "foo/bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/../bar"), "/bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("foo/../bar"), "bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/cat/../../bar"), "/bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("foo/cat/../../bar"), "bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("/./bar"), "/bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("./bar"), "bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("../bar"), "../bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("../../bar"), "../../bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("../.././bar"), "../../bar");
+  EXPECT_EQ(jitify2::detail::path_simplify(".././../bar"), "../../bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("./../../bar"), "../../bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/bar/.."), "/foo");
+  EXPECT_EQ(jitify2::detail::path_simplify("foo/bar/.."), "foo");
+  EXPECT_EQ(jitify2::detail::path_simplify("//foo///..////bar"), "/bar");
+  EXPECT_EQ(jitify2::detail::path_simplify("foo/"), "foo/");
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/"), "/foo/");
+  EXPECT_EQ(jitify2::detail::path_simplify("foo/bar/"), "foo/bar/");
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/bar/"), "/foo/bar/");
+  EXPECT_EQ(jitify2::detail::path_simplify("foo/../bar/"), "bar/");
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/../bar/"), "/bar/");
+  EXPECT_EQ(jitify2::detail::path_simplify("/../foo"), "");  // Invalid path
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/../../bar"), // Invalid path
+            "");
+  EXPECT_EQ(jitify2::detail::path_simplify("/.."), "");  // Invalid path
+  EXPECT_EQ(jitify2::detail::path_simplify("/foo/../.."), "");  // Invalid path
+#if defined _WIN32 || defined _WIN64
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(\)"), R"(\)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(\\)"), R"(\)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(\foo\bar)"), R"(\foo\bar)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(foo\bar)"), R"(foo\bar)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(\foo\.\bar)"), R"(\foo\bar)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(foo\.\bar)"), R"(foo\bar)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(\foo\..\bar)"), R"(\bar)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(foo\..\bar)"), R"(bar)");
+
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(\foo/.\bar)"),
+            R"(\foo/bar)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(\foo/.\bar\./cat)"),
+            R"(\foo/bar\cat)");
+  EXPECT_EQ(jitify2::detail::path_simplify(R"(\foo/.\bar\../cat)"),
+            R"(\foo/cat)");
 #endif
 }
 
@@ -675,7 +727,10 @@ __global__ void my_kernel() {}
   ASSERT_EQ(get_error(program), "");
   PreprocessedProgram preprog = program->preprocess();
   ASSERT_EQ(get_error(preprog), "");
-  CompiledProgram compiled = preprog->compile(instantiation, {}, {}, {"-lfoo"});
+  // TODO: Check that --remove-unused-globals is still needed.
+  // Note: "--remove-unused-globals" is needed to WAR an issue in CUDA 12.0.
+  CompiledProgram compiled = preprog->compile(
+      instantiation, {}, {"--remove-unused-globals"}, {"-lfoo"});
   ASSERT_EQ(get_error(compiled), "");
   EXPECT_NE(compiled->ptx(), "");
   EXPECT_EQ(compiled->lowered_name_map().size(), size_t(1));
@@ -811,22 +866,30 @@ TEST(Jitify2Test, InvalidPrograms) {
   EXPECT_NE(get_error(Program("bad_program", "NOT CUDA C!")->preprocess()), "");
 }
 
-TEST(Jitify2Test, CompileLTO_NVVM) {
+TEST(Jitify2Test, CompileLTO_IR) {
   static const char* const source = R"(
 const int arch = __CUDA_ARCH__ / 10;
 )";
 
   if (!jitify2::nvrtc().GetNVVM()) return;  // Skip if not supported
-  int arch;
   CompiledProgram program = Program("lto_nvvm_program", source)
                                 ->preprocess({"-rdc=true", "-dlto"})
                                 ->compile("", {}, {"-arch=compute_."});
   EXPECT_EQ(program->ptx().size(), 0);
   EXPECT_EQ(program->cubin().size(), 0);
   EXPECT_GT(program->nvvm().size(), 0);
+  EXPECT_EQ(program->nvvm().size(), program->lto_ir().size());
   int current_arch = get_current_device_arch();
-  ASSERT_EQ(program->link()->load()->get_global_value("arch", &arch), "");
-  EXPECT_EQ(arch, current_arch);
+  LinkedProgram linked_program = program->link();
+  if (CUDA_VERSION < 11040) {
+    ASSERT_FALSE(linked_program.ok());
+    ASSERT_TRUE(jitify2::detail::startswith(linked_program.error(),
+                                            "Linking LTO IR is not supported"));
+  } else {
+    int arch;
+    ASSERT_EQ(program->link()->load()->get_global_value("arch", &arch), "");
+    EXPECT_EQ(arch, current_arch);
+  }
 }
 
 TEST(Jitify2Test, LinkMultiplePrograms) {
@@ -896,9 +959,14 @@ __global__ void my_kernel(int* data) {
                                  ->compile("my_kernel");
   // TODO: Consider allowing refs not ptrs for programs, and also addding a
   //         get_kernel() shortcut method to LinkedProgram.
-  Kernel kernel = LinkedProgram::link({&program1, &program2})
-                      ->load()
-                      ->get_kernel("my_kernel");
+  LinkedProgram linked_program = LinkedProgram::link({&program1, &program2});
+  if (CUDA_VERSION < 11040) {
+    ASSERT_FALSE(linked_program.ok());
+    ASSERT_TRUE(jitify2::detail::startswith(linked_program.error(),
+                                            "Linking LTO IR is not supported"));
+    return;
+  }
+  Kernel kernel = linked_program->load()->get_kernel("my_kernel");
   int* d_data;
   CHECK_CUDART(cudaMalloc((void**)&d_data, sizeof(int)));
   int h_data = 3;
@@ -936,20 +1004,27 @@ __global__ void my_kernel(int* data) {
                     ->compile()
                     ->ptx();
   }
-  Kernel kernel =
-      Program("linktest_program2", source2)
-          ->preprocess({"-rdc=true"}, {"-Lexample_headers", "-llinktest.ptx"})
-          ->get_kernel("my_kernel");
-  int* d_data;
-  CHECK_CUDART(cudaMalloc((void**)&d_data, sizeof(int)));
-  int h_data = 3;
-  CHECK_CUDART(
-      cudaMemcpy(d_data, &h_data, sizeof(int), cudaMemcpyHostToDevice));
-  ASSERT_EQ(kernel->configure(1, 1)->launch(d_data), "");
-  CHECK_CUDART(
-      cudaMemcpy(&h_data, d_data, sizeof(int), cudaMemcpyDeviceToHost));
-  EXPECT_EQ(h_data, 26);
-  CHECK_CUDART(cudaFree(d_data));
+  const std::vector<std::string> linker_options0 = {"-Lexample_headers",
+                                                    "-llinktest.ptx"};
+  for (bool use_culink : {false, true}) {
+    std::vector<std::string> linker_options = linker_options0;
+    if (use_culink) {
+      linker_options.push_back("--use-culink");
+    }
+    Kernel kernel = Program("linktest_program2", source2)
+                        ->preprocess({"-rdc=true"}, linker_options)
+                        ->get_kernel("my_kernel");
+    int* d_data;
+    CHECK_CUDART(cudaMalloc((void**)&d_data, sizeof(int)));
+    int h_data = 3;
+    CHECK_CUDART(
+        cudaMemcpy(d_data, &h_data, sizeof(int), cudaMemcpyHostToDevice));
+    ASSERT_EQ(kernel->configure(1, 1)->launch(d_data), "");
+    CHECK_CUDART(
+        cudaMemcpy(&h_data, d_data, sizeof(int), cudaMemcpyDeviceToHost));
+    EXPECT_EQ(h_data, 26);
+    CHECK_CUDART(cudaFree(d_data));
+  }
 }
 
 namespace a {
@@ -1078,9 +1153,9 @@ __global__ void set_attribute_kernel(int* out, int* in) {
 
   // Query the maximum supported shared bytes per block.
   CUdevice device;
-  CHECK_CUDA(cuDeviceGet(&device, 0));
+  CHECK_CUDA(cuda().DeviceGet()(&device, 0));
   int shared_bytes;
-  CHECK_CUDA(cuDeviceGetAttribute(
+  CHECK_CUDA(cuda().DeviceGetAttribute()(
       &shared_bytes, CU_DEVICE_ATTRIBUTE_MAX_SHARED_MEMORY_PER_BLOCK_OPTIN,
       device));
 
@@ -1106,15 +1181,24 @@ struct Bar { int a; double b; };
 __device__ float used_scalar;
 __device__ float used_array[2];
 __device__ Bar used_struct;
+__device__ int used_scalar_init = 3;
+__device__ int used_array_init[] = {4, 5};
+__device__ Bar used_struct_init = {6, 0.0};
 __device__ float unused_scalar;
 __device__ float unused_array[3];
 __device__ Bar unused_struct;
+__device__ int unused_scalar_init = 3;
+__device__ int unused_array_init[] = {4, 5};
+__device__ Bar unused_struct_init = {6, 0.0};
 __device__ float reg, ret, bra;  // Tricky name
 __global__ void foo_kernel(int* data) {
   if (blockIdx.x != 0 || threadIdx.x != 0) return;
   used_scalar = 1.f;
   used_array[1] = 2.f;
   used_struct.b = 3.f;
+  used_scalar_init = 1;
+  used_array_init[1] = 2;
+  used_struct_init.b = 3.f;
   __syncthreads();
   *data += Foo::value + used_scalar + used_array[1] + used_struct.b;
   // printf produces global symbols named $str.
@@ -1134,10 +1218,20 @@ __global__ void foo_kernel(int* data) {
               std::string::npos);
   EXPECT_TRUE(ptx.find(".global .align 8 .b8 used_struct[16];") !=
               std::string::npos);
+  EXPECT_TRUE(ptx.find(".global .align 4 .u32 used_scalar_init = 3;") !=
+              std::string::npos);
+  EXPECT_TRUE(ptx.find(".global .align 4 .b8 used_array_init[8] = {4, 0, 0, 0, "
+                       "5, 0, 0, 0};") != std::string::npos);
+  EXPECT_TRUE(ptx.find(".global .align 8 .b8 used_struct_init[16] = {6, 0, 0, "
+                       "0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};") !=
+              std::string::npos);
   EXPECT_FALSE(ptx.find("_ZN3Foo5valueE") != std::string::npos);
   EXPECT_FALSE(ptx.find("unused_scalar;") != std::string::npos);
   EXPECT_FALSE(ptx.find("unused_array;") != std::string::npos);
   EXPECT_FALSE(ptx.find("unused_struct;") != std::string::npos);
+  EXPECT_FALSE(ptx.find("unused_scalar_init;") != std::string::npos);
+  EXPECT_FALSE(ptx.find("unused_array_init;") != std::string::npos);
+  EXPECT_FALSE(ptx.find("unused_struct_init;") != std::string::npos);
   EXPECT_FALSE(ptx.find(".global .align 4 .f32 reg;") != std::string::npos);
   EXPECT_FALSE(ptx.find(".global .align 4 .f32 ret;") != std::string::npos);
   EXPECT_FALSE(ptx.find(".global .align 4 .f32 bra;") != std::string::npos);
@@ -1177,11 +1271,11 @@ const int arch = __CUDA_ARCH__ / 10;
 
   // Test explicit virtual architecture (compile to PTX).
   // Note: PTX is forwards compatible.
-  program = preprocessed->compile("", {}, {"-arch=compute_35"});
+  program = preprocessed->compile("", {}, {"-arch=compute_50"});
   ASSERT_GT(program->ptx().size(), 0);
   ASSERT_EQ(program->cubin().size(), 0);
   ASSERT_EQ(program->link()->load()->get_global_value("arch", &arch), "");
-  EXPECT_EQ(arch, 35);
+  EXPECT_EQ(arch, 50);
 
   auto expect_cubin_size_if_available = [](size_t cubin_size) {
     if (jitify2::nvrtc().GetCUBIN()) {
@@ -1192,8 +1286,8 @@ const int arch = __CUDA_ARCH__ / 10;
   };
 
   // Test explicit real architecture (may compile directly to CUBIN).
-  program = preprocessed->compile("", {},
-                               {"-arch", "sm_" + std::to_string(current_arch)});
+  program = preprocessed->compile(
+      "", {}, {"-arch", "sm_" + std::to_string(current_arch)});
   EXPECT_GT(program->ptx().size(), 0);
   expect_cubin_size_if_available(program->cubin().size());
   ASSERT_EQ(program->link()->load()->get_global_value("arch", &arch), "");
@@ -1215,7 +1309,7 @@ const int arch = __CUDA_ARCH__ / 10;
 
   // Test that preprocessing and compilation use separate arch flags.
   program = Program("arch_flags_program", source)
-                ->preprocess({"-arch=sm_35"})
+                ->preprocess({"-arch=sm_50"})
                 ->compile("", {}, {"-arch=sm_."});
   EXPECT_GT(program->ptx().size(), 0);
   expect_cubin_size_if_available(program->cubin().size());
@@ -1224,7 +1318,7 @@ const int arch = __CUDA_ARCH__ / 10;
 
   // Test that multiple architectures can be specified for preprocessing.
   program = Program("arch_flags_program", source)
-                ->preprocess({"-arch=compute_35", "-arch=compute_52",
+                ->preprocess({"-arch=compute_50", "-arch=compute_52",
                               "-arch=compute_61"})
                 ->compile("", {}, {"-arch=compute_."});
   EXPECT_GT(program->ptx().size(), 0);
@@ -1360,11 +1454,16 @@ __global__ void my_kernel() {}
 }
 
 TEST(Jitify2Test, Thrust) {
+  // TODO: The need to include cstddef here under CUDA 12.0 may be related to
+  //         the local/system include ambiguity problem in Jitify.
+  // clang-format off
   static const char* const source = R"(
+#include <cuda/std/cstddef>  // WAR for CUDA 12.0 build
 #include <thrust/iterator/counting_iterator.h>
 __global__ void my_kernel(thrust::counting_iterator<int> begin,
                           thrust::counting_iterator<int> end) {
 })";
+  // clang-format on
   // Checks that basic Thrust headers can be compiled.
 #if CUDA_VERSION < 11000
   const char* cppstd = "-std=c++03";
@@ -1477,7 +1576,7 @@ __global__ void my_kernel(float* data) {
 #if CUDA_VERSION >= 11000
 TEST(Jitify2Test, LibCudaCxx) {
   // Test that each libcudacxx header can be compiled on its own.
-  for (const std::string& header :
+  for (const std::string header :
        {"atomic", "barrier", "cassert", "cfloat", "chrono", "climits",
         "cstddef", "cstdint", "ctime", "functional", "latch",
         /*"limits",*/ "ratio", "semaphore", "type_traits", "utility"}) {
@@ -1606,7 +1705,7 @@ int main(int argc, char** argv) {
   ::testing::InitGoogleTest(&argc, argv);
   // Test order is actually undefined, so we use filters to force the
   // AssertHeader test to run last.
-  ::testing::GTEST_FLAG(filter) = "-Jitify2Test.AssertHeader";
+  ::testing::GTEST_FLAG(filter) += ":-Jitify2Test.AssertHeader";
   int result = RUN_ALL_TESTS();
   ::testing::GTEST_FLAG(filter) = "Jitify2Test.AssertHeader";
   return result | RUN_ALL_TESTS();

@@ -7,10 +7,10 @@ set (CMAKE_CUDA_STANDARD 11)  # Doesn't work?
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ")
 if (MSVC)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /WX")
-  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS} /O2")
+  set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2")
 else()
   set(CMAKE_CXX_FLAGS
-      "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -Wconversion -Wshadow")
+      "${CMAKE_CXX_FLAGS} -O3 -Wall -Wextra -Wconversion -Wshadow -fmessage-length=80")
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -g")
 endif()
 
@@ -20,7 +20,7 @@ if (MSVC)
   set(CMAKE_CUDA_FLAGS
     "${CMAKE_CUDA_FLAGS} -Xcompiler=\"/WX\" -rdc=true")
   set(CMAKE_CUDA_FLAGS_RELEASE
-    "${CMAKE_CUDA_FLAGS_RELEASE} /O2")
+    "${CMAKE_CUDA_FLAGS_RELEASE} -O3 -Xcompiler=\"/O2\"")
 else()
   set(CMAKE_CUDA_FLAGS
     "${CMAKE_CUDA_FLAGS} -Xcompiler=\"-Wall -Wextra -Wconversion -Wshadow\" -O3 -rdc=true")
@@ -106,11 +106,17 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/jitify_2nd_compilation_unit.cu
 enable_testing()
 set(TESTS
     jitify2_test
+    jitify2_test_static
 )
 foreach(test ${TESTS})
+  if (${test} MATCHES "_static$")
+    STRING(REGEX REPLACE "_static$" "" test_base ${test})
+  else()
+    set(test_base ${test})
+  endif()
   # Note that generated headers are listed as source files to force dependency.
   add_executable(
-      ${test} EXCLUDE_FROM_ALL ${test}.cu
+      ${test} EXCLUDE_FROM_ALL ${test_base}.cu
       ${CMAKE_CURRENT_BINARY_DIR}/jitify_2nd_compilation_unit.cu
       ${CMAKE_CURRENT_BINARY_DIR}/example_headers/my_header1.cuh.jit
       ${CMAKE_CURRENT_BINARY_DIR}/jitify2_test_kernels.cu.jit.hpp
@@ -119,8 +125,15 @@ foreach(test ${TESTS})
   target_include_directories(${test} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
   # Ensure the main jitify header can be found.
   target_include_directories(${test} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-  target_link_libraries(${test} cuda gtest_main)
+  target_link_libraries(${test} gtest_main)
   set_property(TARGET ${test} PROPERTY CUDA_ARCHITECTURES OFF)
+  if (${test} MATCHES "_static$")
+    target_compile_definitions(${test}
+                               PUBLIC JITIFY_LINK_CUDA_STATIC=1
+                               PUBLIC JITIFY_LINK_NVRTC_STATIC=1
+                               PUBLIC JITIFY_LINK_NVJITLINK_STATIC=1)
+    target_link_libraries(${test} cuda nvrtc nvJitLink)
+  endif()
   if (NOT WIN32)
     target_link_libraries(${test} ${CMAKE_DL_LIBS})
   endif()
